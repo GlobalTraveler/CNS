@@ -3,7 +3,7 @@ from pylab import *
 from h5py import File
 
 
-def mlp(X, t, eta = 1e-1, gamma = 0, num = 1e3, K = 1, M = 8, save = 4):
+def mlp(X, t, eta = 1e-1, gamma = 0, num = 1e3, K = 1, M = 80, save = 4):
     '''
     Multi-layered-pereptron
     K = output nodes
@@ -20,24 +20,29 @@ def mlp(X, t, eta = 1e-1, gamma = 0, num = 1e3, K = 1, M = 8, save = 4):
     D = X.shape[1] + 1
     # stack bias constant signal of ones
     X = np.hstack((X, np.ones((X.shape[0], 1))))
+    act = lambda x : 1/(1+np.exp(-x))
+    dact = lambda x: x - x**2
     # init weights
     # hidden weights and outputweights
-    wh = np.random.rand(D, M) - 1/2
-    wo = np.random.rand(M, K) - 1/2
+    wh = np.random.randn(D, M) # - 1/2
+    wo = np.random.randn(M, K) # - 1/2
     errors = np.zeros(num + 1)
     preds = [[]] * (save + 1)
     idx = 0
     tmp = num // save
     for i in range(num + 1):
         # forward pass
-        a = X.dot(wh);  z = np.tanh(a);   y = z.dot(wo)
+        a = X.dot(wh);  z = act(a);   y = z.dot(wo)
+
         # backward pass
         dk = t - y
         # compute hidden activation; note elementwise product!!
-        dj = (1 - z**2) * ((wo.dot(dk.T).T))
-        # dj = z * (1 - z ) * ((wo.dot(dk.T)).T)
+        dj = dact(z) * ((wo.dot(dk.T).T))
+        # dj = z * (1 - z ) * ((wo.dot(dk.T)).T)\
+        # print(z.shape); assert 0
         # update th e weights
         E1 = z.T.dot(dk); E2 = X.T.dot(dj)
+        # print(z.shape, E1.shape, dk.shape, wo.shape); assert 0
         wo += eta * E1 + gamma * wo
         wh += eta * E2 + gamma * wh
         error = np.sum((y-t)**2)
@@ -80,8 +85,12 @@ with File(fileDir) as f:
         data.append(tmp)
 
 trainTargets, trainImages, testTargets, testImages = data
-errors, preds = mlp(trainImages, trainTargets, eta = 1e-5, num = 800)
-
+trainTargets[trainTargets == 3] = 1
+trainTargets[trainTargets == 7] == 0
+trainImages = np.sign(trainImages)
+errors, preds = mlp(trainImages, trainTargets,M = 20, eta = 1e-5, num = 100)
+print(errors[-1])
 fig, ax  = subplots()
 ax.plot(errors)
+ax.set_title(errors[-1])
 show()
