@@ -100,11 +100,11 @@ def main(args):
 	f_name = args.f_name
 
 	train_data, train_targets, test_data, test_targets = loadData()
-	print(train_targets.shape)
+
 	#Normalize
 	if act_function == 'tanh':
 		#treshold value for binarization
-		threshold = 10
+		threshold = 0
 		train_data = 2*(train_data > threshold) - 1
 		test_data = 2*(test_data > threshold) - 1
 	else:
@@ -157,7 +157,7 @@ if __name__ == '__main__':
 	parser.add_argument('-f', action='store', dest='f_name',
                     help='File ending for weight saving')
 	parser.add_argument('-a', action='store', dest='act_function', default='sig', choices=('sig', 'tanh', 'relu'),
-                    help='Plot results')	
+                    help='Activation function')	
 	parser.add_argument('--plot', action='store_true', dest='plot', default=False,
                     help='Plot results')	
 	args = parser.parse_args()
