@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 import sys
 import pickle
 import copy
@@ -39,6 +40,7 @@ class MLP():
 		self.alpha = alpha
 		self.old_deltas = [np.zeros((n.shape[1],n.shape[0]-1)) for n in self.weights]
 
+		self.g_old = np.vstack([np.ones((n.shape[1]*(n.shape[0]-1),1)) for n in self.weights])
 	'''
 	Method to set network weights.
 	@param weights: List of weight matrices
@@ -72,7 +74,6 @@ class MLP():
 		
 		return self.outputs
 
-
 	'''
 	Method to back-propagate error through the network and adjust weights.
 	Must be called after forward call for correct calculations.
@@ -97,6 +98,46 @@ class MLP():
 			layer[0] += np.mean(deltas[l],axis=0) * self.eta
 
 
+	def backwardConjGrad(self, targets):
+		
+
+		cost = lambda x: np.mean((x-targets)**2)
+
+		opt,fopt = scipy.optimize.fmin(func=cost,x0=[0],disp=False);
+		print(opt, fopt)
+		# Adjust weights
+		for l, layer in enumerate(self.weights):
+			layer[1:] += opt * self.old_deltas[l].T
+			layer[0] += np.mean(self.old_deltas[l].T,axis=0) * self.eta
+
+		# Calculate deltas
+		error = (targets - self.outputs[-1])
+		deltas = [self.derivative(self.outputs[-1]) * error]
+		for k in range(len(self.weights) - 1, 0, -1):
+			derivative = self.derivative(self.outputs[k])
+			partial_error = np.dot(deltas[0],self.weights[k].T)
+			deltas.insert(0,partial_error[:,1:] * derivative)
+		
+		gs = []
+		ds = []
+		for l, layer in enumerate(self.weights):
+			g = np.dot(deltas[l].T,self.outputs[l])
+			ds.append(-g)
+			gs.append(g.flatten()[:,None])
+
+		gs = np.vstack(gs)
+		#print(self.shape)
+		#print([w.shape for w in self.weights])
+		#print(np.dot(self.g_old.T,self.g_old))
+		m = np.dot(gs.T,(gs-self.g_old)) / np.dot(self.g_old.T,self.g_old)
+		m = np.maximum(m,0)
+
+		#print(m)
+
+		self.g_old = gs
+
+		for l, layer in enumerate(self.weights):
+			self.old_deltas[l] = ds[l] + m*self.old_deltas[l]
 
 	'''
 	Method to calculate sum of weights
@@ -104,6 +145,7 @@ class MLP():
 	'''
 	def sumWeights(self):
 		return np.sum([np.sum(np.abs(W)) for W in self.weights])
+
 
 	'''
 	Calculate maximum absolut weight change
@@ -137,7 +179,8 @@ class MLP():
 					c.append(np.sum(targets[index][0]==np.round(self.outputs[-1][0])))
 				else:
 					c.append(np.sum(targets[index][0]==np.sign(self.outputs[-1][0])))	
-				self.backward(np.vstack(targets[index]))
+				self.backwardConjGrad(np.vstack(targets[index]))
+				#self.backward(np.vstack(targets[index]))
 			
 			self.error_over_time.append(np.mean(e,axis=0))
 			self.clsfe_over_time.append(np.mean(c,axis=0))
@@ -147,7 +190,7 @@ class MLP():
 
 			dW = self.weightChange(oldW)
 			print(dW)
-			if dW <= stopTol: break
+			#if dW <= stopTol: break
 		
 		print('Finished.')
 		
