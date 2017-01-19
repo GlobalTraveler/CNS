@@ -105,8 +105,8 @@ def main(args):
 	if act_function == 'tanh':
 		#treshold value for binarization
 		threshold = 10
-		train_data = 2*(train_data > treshold) - 1
-		test_data = 2*(test_data > treshold) - 1
+		train_data = 2*(train_data > threshold) - 1
+		test_data = 2*(test_data > threshold) - 1
 	else:
 		train_data /= 255
 		test_data /= 255
