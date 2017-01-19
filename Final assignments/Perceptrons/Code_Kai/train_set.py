@@ -102,11 +102,13 @@ def main(args):
 	train_data, train_targets, test_data, test_targets = loadData()
 
 	#Normalize
-	if act_function == 'tanh':
+	if 'tanh' in act_function:
 		#treshold value for binarization
 		threshold = 0
 		train_data = 2*(train_data > threshold) - 1
 		test_data = 2*(test_data > threshold) - 1
+		train_targets[train_targets==0] = -1
+		test_targets[test_targets==0] = -1
 	else:
 		train_data /= 255
 		test_data /= 255
@@ -156,7 +158,7 @@ if __name__ == '__main__':
                     help='Tolerance of weight changes for convergence')
 	parser.add_argument('-f', action='store', dest='f_name',
                     help='File ending for weight saving')
-	parser.add_argument('-a', action='store', dest='act_function', default='sig', choices=('sig', 'tanh', 'relu'),
+	parser.add_argument('-a', action='store', dest='act_function', default='sig', choices=('sig', 'tanh', 'tanh_opt', 'relu'),
                     help='Activation function')	
 	parser.add_argument('--plot', action='store_true', dest='plot', default=False,
                     help='Plot results')	

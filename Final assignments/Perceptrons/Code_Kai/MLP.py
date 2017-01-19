@@ -5,11 +5,14 @@ import copy
 
 class MLP():
 
+
 	act_functions = {'sig': (lambda x:  1 / (1 + np.exp(-x))),\
 	 'tanh': (lambda x: (np.exp(x)-np.exp(-x))/(np.exp(x)+np.exp(-x))),\
+	 'tanh_opt': (lambda x: 1.7159 * np.tanh(2/3 * x)),\
 	  'relu': (lambda x: np.maximum(x,0,x))}
 
-	derivatives = {'sig': (lambda x: x * (1-x)), 'tanh': (lambda x: 1 - x**2), 'relu': (lambda x: 1 * (x > 0))}
+	derivatives = {'sig': (lambda x: x * (1-x)), 'tanh': (lambda x: 1 - x**2),\
+	 'tanh_opt': lambda x: 2/3*1.7159*(1 - 1/1.7159**2*x**2),'relu': (lambda x: 1 * (x > 0))}
 
 	'''
 	Constructor
@@ -25,6 +28,7 @@ class MLP():
 		#self.weights = [np.random.uniform(-lrange(layers[i],layers[i+1]),lrange(layers[i],layers[i+1]),size=(layers[i]+1, layers[i+1])) for i in range(0, len(layers)-1)]
 		
 		self.weights = [np.random.randn(layers[i]+1, layers[i+1]) for i in range(0, len(layers)-1)]
+		self.act_name = act_fun
 		self.act_fun = MLP.act_functions[act_fun] 
 		self.derivative = MLP.derivatives[act_fun]
 		self.eta = eta
@@ -86,8 +90,9 @@ class MLP():
 			
 
 		# Adjust weights
+		batch_size = self.outputs[0].shape[0]
 		for l, layer in enumerate(self.weights):
-			self.old_deltas[l] = (np.dot(deltas[l].T,self.outputs[l]) * self.eta) + self.alpha*self.old_deltas[l]
+			self.old_deltas[l] = (1/batch_size * np.dot(deltas[l].T,self.outputs[l]) * self.eta) + self.alpha*self.old_deltas[l]
 			layer[1:] += self.old_deltas[l].T
 			layer[0] += np.mean(deltas[l],axis=0) * self.eta
 
@@ -128,7 +133,10 @@ class MLP():
 			for index in np.random.choice(np.arange(len(data)), size=(samples//batch_size, batch_size), replace=False):
 				self.forward(np.vstack(data[index]))
 				e.append(np.mean((self.outputs[-1] - targets[index])**2))
-				c.append(np.sum(targets[index][0]==np.round(self.outputs[-1][0])))
+				if self.act_name=='sig':
+					c.append(np.sum(targets[index][0]==np.round(self.outputs[-1][0])))
+				else:
+					c.append(np.sum(targets[index][0]==np.sign(self.outputs[-1][0])))	
 				self.backward(np.vstack(targets[index]))
 			
 			self.error_over_time.append(np.mean(e,axis=0))
@@ -167,6 +175,9 @@ class MLP():
 		c = []
 		for i, d in enumerate(data):
 			error.append((self.forward(d[None,:])[-1] - targets[i])**2)
-			c.append(targets[i][0]==round(self.outputs[-1][0,0]))
+			if self.act_name=='sig':
+				c.append(targets[i][0]==np.round(self.outputs[-1][0,0]))
+			else:
+				c.append(targets[i][0]==np.sign(self.outputs[-1][0,0]))
 		return error, np.sum(c)/len(data)
 
