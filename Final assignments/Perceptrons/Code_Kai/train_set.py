@@ -84,6 +84,7 @@ def loadData(nums = (3,7), oneHot=False):
 
 def main(args):
 
+	np.random.seed(23)
 
 	input_dim = args.input_dim
 	output_dim = args.output_dim
@@ -95,6 +96,7 @@ def main(args):
 	batch_size = args.batch_size
 	sample_size = args.sample_size * 2
 	alpha = args.alpha 
+	dropout = args.dropout
 	stopTol = args.stopTol
 	act_function = args.act_function
 	f_name = args.f_name
@@ -118,23 +120,29 @@ def main(args):
 
 	# Train network
 	save = True if args.plot else False
-	error, accuracy = multi.train(train_data, train_targets, epochs, sample_size, batch_size=batch_size, stopTol=stopTol, save=save)
+	if args.conj:
+		method = 'conj'
+		batch_size = sample_size
+	else:	
+		method = 'sgd'  
+	train_error, train_accuracy = multi.train(train_data, train_targets, epochs, sample_size,\
+	 					batch_size=batch_size, stopTol=stopTol, method=method, dropout=dropout, save=save)
 
 	# Plot learning curves
 	if args.plot: 
-		plot_error(error, accuracy, args, layers)
+		plot_error(train_error, train_accuracy, args, layers)
 
 	# Test network
-	error,accuracy = multi.test(test_data, test_targets)
+	test_error, test_accuracy = multi.test(test_data, test_targets)
 
-	m = np.mean(np.array(error))
-	s = np.sum(np.mean(np.array(error),axis=0))
+	m = np.mean(np.array(test_error))
+	s = np.sum(np.mean(np.array(test_error),axis=0))
 	print('Performance on Testdata:')
 	print('Mean squared error is ', m)
 	print('Sum of squares error is ', s)
-	print('Percentage of correctly classified imgs is ',accuracy)
+	print('Percentage of correctly classified imgs is ',test_accuracy)
 
-	return accuracy
+	return train_error, train_accuracy, test_error, test_accuracy
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description='Train a multi layer perceptron to classify MNIST digits')
@@ -152,6 +160,8 @@ if __name__ == '__main__':
                     help='Size of mini batches')
 	parser.add_argument('-m', action='store', dest='alpha', type=float, default=0,
                     help='Alpha for momentum')
+	parser.add_argument('-d', action='store', dest='dropout', type=float, default=0,
+                    help='Percentage of hidden neurons to drop out')
 	parser.add_argument('-n', action='store', dest='sample_size', type=int, default=6000,
                     help='Number of training samples per class; max=6000')
 	parser.add_argument('-t', action='store', dest='stopTol', type=float, default=1e-5,
@@ -160,6 +170,8 @@ if __name__ == '__main__':
                     help='File ending for weight saving')
 	parser.add_argument('-a', action='store', dest='act_function', default='sig', choices=('sig', 'tanh', 'tanh_opt', 'relu'),
                     help='Activation function')	
+	parser.add_argument('-c', action='store_true', dest='conj', default=False,
+                    help='Use conjugate gradient descent')	
 	parser.add_argument('--plot', action='store_true', dest='plot', default=False,
                     help='Plot results')	
 	args = parser.parse_args()
