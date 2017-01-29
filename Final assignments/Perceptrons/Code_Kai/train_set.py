@@ -34,6 +34,7 @@ def plot_error(error, accuracy, args, layers):
 	ax[1].set_xlabel('Epoch')
 	ax[1].set_ylabel('Accuracy')
 	fig.savefig('{}_eta_{}_alpha_{}_layers{}.pdf'.format(args.f_name,args.eta,args.alpha,layers))
+	plt.show()
 
 def loadData(nums = (3,7), oneHot=False):
 
@@ -96,8 +97,8 @@ def main(args):
 	batch_size = args.batch_size
 	sample_size = args.sample_size * 2
 	alpha = args.alpha 
-	dropout = args.dropout
 	stopTol = args.stopTol
+	validation = args.validation
 	act_function = args.act_function
 	f_name = args.f_name
 
@@ -126,7 +127,7 @@ def main(args):
 	else:	
 		method = 'sgd'  
 	train_error, train_accuracy = multi.train(train_data, train_targets, epochs, sample_size,\
-	 					batch_size=batch_size, stopTol=stopTol, method=method, dropout=dropout, save=save)
+	 					batch_size=batch_size, stopTol=stopTol, method=method, val=validation, save=save)
 
 	# Plot learning curves
 	if args.plot: 
@@ -160,12 +161,12 @@ if __name__ == '__main__':
                     help='Size of mini batches')
 	parser.add_argument('-m', action='store', dest='alpha', type=float, default=0,
                     help='Alpha for momentum')
-	parser.add_argument('-d', action='store', dest='dropout', type=float, default=0,
-                    help='Percentage of hidden neurons to drop out')
 	parser.add_argument('-n', action='store', dest='sample_size', type=int, default=6000,
                     help='Number of training samples per class; max=6000')
 	parser.add_argument('-t', action='store', dest='stopTol', type=float, default=1e-5,
                     help='Tolerance of weight changes for convergence')
+	parser.add_argument('-v', action='store', dest='validation', type=float, default=0,
+                    help='Percentage of validation split for early stopping')
 	parser.add_argument('-f', action='store', dest='f_name',
                     help='File ending for weight saving')
 	parser.add_argument('-a', action='store', dest='act_function', default='sig', choices=('sig', 'tanh', 'tanh_opt', 'relu'),

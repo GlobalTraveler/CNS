@@ -26,9 +26,6 @@ class MLP():
 	'''
 	def __init__(self, layers, eta, printname='nuex', alpha = 0, act_fun='sig'):
 
-		#lrange = lambda s1,s2: np.sqrt(6/(s1+1+s2))
-		#self.weights = [np.random.uniform(-lrange(layers[i],layers[i+1]),lrange(layers[i],layers[i+1]),size=(layers[i]+1, layers[i+1])) for i in range(0, len(layers)-1)]
-		
 		self.weights = [np.random.randn(layers[i]+1, layers[i+1]) for i in range(0, len(layers)-1)]
 		self.act_name = act_fun
 		self.act_fun = MLP.act_functions[act_fun] 
@@ -40,6 +37,7 @@ class MLP():
 		self.Wabs = []
 		self.alpha = alpha
 		
+
 		if 'tanh' in act_fun:
 			self.comp_out = lambda t,y: t==np.sign(y)
 			self.final_layer = lambda x: self.act_fun(x)
@@ -49,9 +47,10 @@ class MLP():
 			self.final_layer = lambda x: MLP.act_functions['sig'](x)	
 			self.final_derivative = lambda x: MLP.derivatives['sig'](x)
 		
+
 		self.old_deltas = [np.zeros((n.shape[1],n.shape[0])) for n in self.weights]
 		self.g_old = np.vstack([np.ones((n.shape[1]*(n.shape[0]),1)) for n in self.weights])
-	
+		self.g0 = np.zeros(self.g_old.shape)
 	'''
 	Method to set network weights.
 	@param weights: List of weight matrices
@@ -65,7 +64,7 @@ class MLP():
 	@param data: sample
 	@return List of outputs per layer
 	'''
-	def forward(self, data, dropout=0):
+	def forward(self, data):
 		
 		self.outputs = [data]
 		for l, layer in enumerate(self.weights[:-1]):
@@ -73,11 +72,6 @@ class MLP():
 			self.outputs[l] = np.append(np.ones((self.outputs[l].shape[0],1)), self.outputs[l], axis=1)
 			out = self.act_fun(np.dot(self.outputs[l],layer))
 			
-			#Randomly deactivate neurons if dropout
-			if dropout:
-				mask = np.random.binomial(n=1, p=1-dropout, size=out.shape) 
-				out *= mask	
-
 			self.outputs.append(out)
 		
 		#Output layer activity
@@ -93,7 +87,7 @@ class MLP():
 	Must be called after forward call for correct calculations.
 	@param targets
 	'''
-	def backward(self, targets, method, dropout=0):
+	def backward(self, targets, method):
 
 		# Calculate deltas
 		deltas = self.calcDeltas(targets)
@@ -109,10 +103,12 @@ class MLP():
 
 		#Conjugate gradient descent
 		else:
-			
-			#Find update step size with line search
-			opt = scipy.optimize.fmin(func=lambda x: self.cost(x,targets),x0=[0], disp=False)
 
+			if np.linalg.norm(self.g_old) <= self.epsilon*np.linalg.norm(self.g0):
+				return
+
+			#Find update step size with line search
+			opt = scipy.optimize.minimize_scalar(fun=lambda x: self.cost(x,targets), method='Brent').x
 			# Adjust weights
 			for l, layer in enumerate(self.weights):
 				layer +=  opt * self.old_deltas[l].T
@@ -139,6 +135,8 @@ class MLP():
 				new_delta = ds[l] + beta*self.old_deltas[l]
 				self.old_deltas[l] = new_delta
 
+			if np.all(self.g0==0):
+				self.g0 = self.g_old
 
 	'''
 	Method to calculate partial derivatives
@@ -149,10 +147,12 @@ class MLP():
 		# Calculate deltas
 		error = (targets - self.outputs[-1])
 		deltas = [self.final_derivative(self.outputs[-1]) * error]
+		i = 0
 		for k in range(len(self.weights) - 1, 0, -1):
 			derivative = self.derivative(self.outputs[k][:,1:])
 			partial_error = np.dot(deltas[0],self.weights[k][1:,:].T)
-			deltas.insert(0,partial_error * derivative)
+			delta = partial_error * derivative
+			deltas.insert(0,delta)
 
 		return deltas	
 
@@ -186,7 +186,7 @@ class MLP():
 	@return change
 	'''
 	def weightChange(self, old_weights):
-		return np.max([np.max(np.abs(w1-w2)) for w1,w2 in zip(self.weights, old_weights)])
+		return np.mean([np.mean(np.abs(w1-w2)) for w1,w2 in zip(self.weights, old_weights)])
 	
 	'''
 	Training cylce
@@ -198,29 +198,55 @@ class MLP():
 	@param save: Save training paramters after training
 	@return error per epoch; accuracy per epoch
 	'''
-	def train(self, data, targets, epochs, samples, batch_size=10, stopTol=1e-5, method='sgd', dropout=0, save=False):
-				
+	def train(self, data, targets, epochs, samples, batch_size=10, stopTol=1e-5, val=0, method='sgd', save=False):
+		
+		self.epsilon = stopTol				
+		#If validation set is to be use, split data
+		if val:
+			mask = np.random.choice(np.arange(len(data)), size=int(val * samples), replace=False)
+			valData = data[mask]
+			valTargets = targets[mask]
+
+			data = np.delete(data,mask,0)
+			tagets = np.delete(targets,mask,0)
+
+			if batch_size==samples: batch_size = int((1-val) * batch_size)
+			
+			samples = int((1-val)*samples)	
+
 		print('Training {} epochs with {} samples each.'.format(epochs, samples))
 		count = 0
+		countTest = 0 
+		e0 = self.eta
+
+		testErrors = []
+		dE = np.inf
 		for epoch in range(epochs):
 			sys.stdout.write('Epoch ' + str(epoch+1) + '\n')
 			oldW = copy.deepcopy(self.weights)
 			e = []
 			c = []
 			for index in np.random.choice(np.arange(len(data)), size=(samples//batch_size, batch_size), replace=False):
-				self.forward(np.vstack(data[index]), dropout)
+				self.forward(np.vstack(data[index]))
 				
 				e.append(np.mean((self.outputs[-1] - targets[index])**2))
 				c.append(np.sum(self.comp_out(targets[index],self.outputs[-1])))
 				
-				self.backward(np.vstack(targets[index]), method, dropout)
+				self.backward(np.vstack(targets[index]), method)
+
+			#self.eta = e0*np.exp(-e0*epoch)
 
 			self.error_over_time.append(np.mean(e,axis=0))
 			self.clsfe_over_time.append(np.sum(c,axis=0) / samples)
-			#self.Wabs.append(self.sumWeights())
+			self.Wabs.append(self.sumWeights())
 			print('accuracy: {}'.format(self.clsfe_over_time[-1]))
 			print('error: {}'.format(self.error_over_time[-1]))
 
+			if val:
+				t,_ = self.test(valData,valTargets)
+				t = np.mean(t)
+				dE = testErrors[-1] - t
+				testErrors.append(t)
 
 			dW = self.weightChange(oldW)
 			print('delta W: {}'.format(dW))
@@ -229,18 +255,28 @@ class MLP():
 				count += 1
 			else:
 				count = 0
-			if count >= 3: break
+			if count >= 5: break
+
+
+			#Convergence if validation does not go down anymore
+			if epoch > 1 and dE <= 1e-3: 
+				countTest += 1
+			else:
+				countTest = 0
+			if countTest >= 20: break
 		
 		print('Finished.')
 		
 		if save:
-			filename = 'weights_eta_' + self.printname + '.pkl'
+			filename = 'weights_' + self.printname + '.pkl'
 			pickle.dump(self.weights,open(filename,'wb'))
-			filename = 'error_eta_' + self.printname + '.pkl'
+			filename = 'error_' + self.printname + '.pkl'
 			pickle.dump(self.error_over_time,open(filename,'wb'))
-			filename = 'clsfe_eta_' + self.printname + '.pkl'
+			filename = 'valError_' + self.printname + '.pkl'
+			pickle.dump(self.error_over_time,open(filename,'wb'))
+			filename = 'clsfe_' + self.printname + '.pkl'
 			pickle.dump(self.clsfe_over_time,open(filename,'wb'))
-			filename = 'wChanges_eta_' + self.printname + '.pkl'
+			filename = 'wChanges_' + self.printname + '.pkl'
 			pickle.dump(self.Wabs,open(filename,'wb'))
 
 		return self.error_over_time, self.clsfe_over_time
